@@ -78,7 +78,7 @@ function M.setup(opts)
 		"n",
 		opts.keymap,
 		":CopyBreadcrumbs<CR>",
-		{ noremap = true, silent = true, desc = "Copy Breadcrumbs" }
+		{ noremap = true, silent = true, desc = "Copy Python Breadcrumbs" }
 	)
 end
 
