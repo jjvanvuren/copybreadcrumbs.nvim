@@ -9,13 +9,14 @@ Requires the pyright LSP.
 
 ## Installation
 
-To install this plugin with LazyVim, add the following to your configuration (e.g., `lua/plugins/copybreadcrumbs.lua`):
+To install this plugin with [lazy.nvim](https://lazy.folke.io/), add the following to your configuration (e.g., `lua/plugins/copybreadcrumbs.lua`):
 
 ```lua
 return {
   {
     "jjvanvuren/copybreadcrumbs.nvim",
     lazy = true,
+    event = "LazyFile",
     ft = { "python" },
     opts = {}
   },
@@ -33,6 +34,7 @@ return {
   {
     "jjvanvuren/copybreadcrumbs.nvim",
     lazy = true,
+    event = "LazyFile",
     ft = { "python" },
     opts = { keymap = "<leader>bc" }
   },
