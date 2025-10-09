@@ -22,7 +22,8 @@ local function copy_breadcrumbs()
   -- Convert the path to Python module format
   local python_module = relative_file:gsub("/", "."):gsub("%.py$", "")
 
-  local params = vim.lsp.util.make_position_params()
+  local client = vim.lsp.get_clients({ bufnr = 0 })[1]
+  local params = vim.lsp.util.make_position_params(0, client.offset_encoding or "utf-16")
 
   vim.lsp.buf_request(0, "textDocument/documentSymbol", params, function(err, result, _, _)
     if err or not result then
