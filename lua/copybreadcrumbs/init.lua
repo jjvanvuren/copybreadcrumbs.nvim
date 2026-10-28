@@ -1,86 +1,56 @@
 local M = {}
 
-local function copy_breadcrumbs()
-  local lsp_clients = vim.lsp.get_clients({ bufnr = 0 }) -- Limit to the current buffer
-  local pyright_active = false
+local SymbolKind = vim.lsp.protocol.SymbolKind
+local wanted_kinds = { [SymbolKind.Class] = true, [SymbolKind.Method] = true, [SymbolKind.Function] = true }
 
-  for _, client in ipairs(lsp_clients) do
-    if client.name == "pyright" then
-      pyright_active = true
-      break
+-- Recursively build the dotted path of the class/method/function enclosing the 0-based line
+local function find_symbol(symbols, line)
+  for _, symbol in ipairs(symbols or {}) do
+    local range = symbol.range
+    if wanted_kinds[symbol.kind] and range and range.start.line <= line and line <= range["end"].line then
+      local child = find_symbol(symbol.children, line)
+      return child and (symbol.name .. "." .. child) or symbol.name
     end
   end
+end
 
-  if not pyright_active then
+local function copy_breadcrumbs()
+  local bufnr = vim.api.nvim_get_current_buf()
+  local client = vim.lsp.get_clients({ bufnr = bufnr, name = "pyright" })[1]
+  if not client then
     vim.notify("Pyright is not active", vim.log.levels.WARN)
     return
   end
 
-  local current_file = vim.fn.expand("%:p") -- Full path to the file
-  local relative_file = vim.fn.fnamemodify(current_file, ":~:.") -- Get the relative path
-
+  local relative_file = vim.fn.fnamemodify(vim.fn.expand("%:p"), ":~:.")
   -- Convert the path to Python module format
   local python_module = relative_file:gsub("/", "."):gsub("%.py$", "")
+  local cursor_line = vim.api.nvim_win_get_cursor(0)[1] - 1
+  local params = { textDocument = vim.lsp.util.make_text_document_params(bufnr) }
 
-  local client = vim.lsp.get_clients({ bufnr = 0 })[1]
-  local params = vim.lsp.util.make_position_params(0, client.offset_encoding or "utf-16")
-
-  vim.lsp.buf_request(0, "textDocument/documentSymbol", params, function(err, result, _, _)
+  client:request("textDocument/documentSymbol", params, function(err, result)
     if err or not result then
       vim.notify("Failed to fetch symbols", vim.log.levels.ERROR)
       return
     end
 
-    local cursor_pos = params.position
-
-    -- Function to recursively search for the symbol under the cursor
-    local function find_symbol(symbols)
-      for _, symbol in ipairs(symbols) do
-        -- Only interested in classes, methods and functions
-        if symbol.range and symbol.name and (symbol.kind == 5 or symbol.kind == 6 or symbol.kind == 12) then
-          local start = symbol.range.start
-          local stop = symbol.range["end"]
-
-          if cursor_pos.line >= start.line and cursor_pos.line <= stop.line then
-            if symbol.children then
-              -- Recursively search children for methods inside classes
-              local child_symbol = find_symbol(symbol.children)
-              if child_symbol then
-                return symbol.name .. "." .. child_symbol
-              end
-            end
-            return symbol.name
-          end
-        end
-      end
-      return nil
-    end
-
-    local symbol_path = find_symbol(result)
-
+    local symbol_path = find_symbol(result, cursor_line)
     if not symbol_path then
       vim.notify("No symbol found under cursor", vim.log.levels.WARN)
       return
     end
 
-    local full_location = string.format("%s.%s", python_module, symbol_path)
+    local full_location = python_module .. "." .. symbol_path
     vim.fn.setreg("+", full_location) -- Copy to system clipboard
     vim.notify("Copied to clipboard: " .. full_location, vim.log.levels.INFO)
-  end)
+  end, bufnr)
 end
 
 function M.setup(opts)
-  opts = opts or {}
-  opts.keymap = opts.keymap or "<leader>cb"
+  local keymap = (opts or {}).keymap or "<leader>cb"
 
   vim.api.nvim_create_user_command("CopyBreadcrumbs", copy_breadcrumbs, {})
-
-  vim.keymap.set(
-    "n",
-    opts.keymap,
-    ":CopyBreadcrumbs<CR>",
-    { noremap = true, silent = true, desc = "Copy Python Breadcrumbs" }
-  )
+  vim.keymap.set("n", keymap, copy_breadcrumbs, { desc = "Copy Python Breadcrumbs" })
 end
 
 return M
